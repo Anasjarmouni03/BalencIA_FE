@@ -27,7 +27,12 @@ import {
 // ─── Config ────────────────────────────────────────────────────────────────
 
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000");
+
+function normalizeBaseUrl(value: string): string {
+  // Avoid accidental `//path` requests when env var includes a trailing slash.
+  return value.endsWith("/") ? value.slice(0, -1) : value;
+}
 
 // ─── Internal helpers ──────────────────────────────────────────────────────
 
