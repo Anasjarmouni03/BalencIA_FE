@@ -1,5 +1,7 @@
 import type { TeamEmployee } from "@/types/index";
 import Badge from "@/components/ui/Badge";
+import Avatar from "@/components/ui/Avatar";
+import { getProfileImageUrl } from "@/lib/profile-images";
 
 interface EmployeeRowProps {
   employee: TeamEmployee;
@@ -41,7 +43,10 @@ export default function EmployeeRow({ employee, isSelected = false, onSelect }: 
           : "bg-background-primary hover:bg-[var(--colors-background-secondary)]",
       ].join(" ")}
     >
-      <div className="font-medium text-text-primary truncate">{employee.name}</div>
+      <div className="flex items-center gap-3 min-w-0">
+        <Avatar name={employee.name} imageUrl={getProfileImageUrl(employee)} size="sm" />
+        <div className="font-medium text-text-primary truncate">{employee.name}</div>
+      </div>
       <div className="font-semibold text-text-primary">
         {employee.score != null ? `${employee.score.toFixed(0)}` : employee.latest_score?.toFixed(1) || "-"}
       </div>

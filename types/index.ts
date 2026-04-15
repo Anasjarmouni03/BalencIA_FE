@@ -14,6 +14,7 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   team_id?: string;
+  avatar_url?: string;
 }
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
@@ -143,6 +144,7 @@ export interface TeamEmployee {
   id: string;
   name: string;
   role?: UserRole;
+  avatar_url?: string;
   risk_level: RiskLevel | string;
   score?: number | null;            // global_score 0-100 (was latest_score float 1-5)
   latest_score?: number;            // legacy name, kept for mock compat

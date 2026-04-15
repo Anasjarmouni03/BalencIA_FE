@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import { useManagerSummary } from "@/hooks/useManagerSummary";
 import { ROUTES, DEFAULT_TEAM_ID } from "@/lib/constants";
 import { simulateManagerIntervention } from "@/services/api";
 import type { InterventionType, SimulationResponse, TeamEmployee } from "@/types";
+import { useDashboard as useEmployeeDashboard } from "@/hooks/useDashboard";
 
 import PageHeader from "@/components/ui/PageHeader";
 import Card from "@/components/ui/Card";
@@ -72,18 +73,45 @@ const INTERVENTION_CATALOG: Array<{
   },
 ];
 
-export default function ManagerPage() {
+function ManagerPageContent() {
   const { session, role } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<ManagerTabKey>("overview");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [riskFilter, setRiskFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [reportWindow, setReportWindow] = useState<"7d" | "14d" | "30d">("7d");
+  const [autoEmailReport, setAutoEmailReport] = useState(true);
+  const [highRiskThreshold, setHighRiskThreshold] = useState(75);
+  const [meetingAlertThreshold, setMeetingAlertThreshold] = useState(65);
+  const [teamDigestEnabled, setTeamDigestEnabled] = useState(true);
+  const [anomalyAlertsEnabled, setAnomalyAlertsEnabled] = useState(true);
 
   const [simulation, setSimulation] = useState<SimulationResponse | null>(null);
   const [simulationLoading, setSimulationLoading] = useState(false);
   const [simulationError, setSimulationError] = useState<string | null>(null);
+
+  function isValidTab(value: string | null): value is ManagerTabKey {
+    return (
+      value === "overview" ||
+      value === "employees" ||
+      value === "insights" ||
+      value === "interventions" ||
+      value === "reports" ||
+      value === "settings"
+    );
+  }
+
+  const activeTab = isValidTab(searchParams.get("tab"))
+    ? (searchParams.get("tab") as ManagerTabKey)
+    : "overview";
+
+  function changeTab(tab: ManagerTabKey) {
+    router.replace(`/manager?tab=${tab}`);
+  }
+
+  const showManagerRail = activeTab !== "reports" && activeTab !== "settings";
 
   useEffect(() => {
     if (!session) {
@@ -122,6 +150,8 @@ export default function ManagerPage() {
     if (!summary || !selectedEmployeeId) return null;
     return summary.employees.find((employee) => employee.id === selectedEmployeeId) ?? null;
   }, [summary, selectedEmployeeId]);
+
+  const employeeDashboardState = useEmployeeDashboard(selectedEmployeeId);
 
   const anomalyAlerts = useMemo(() => {
     if (!summary) return [];
@@ -177,7 +207,7 @@ export default function ManagerPage() {
     try {
       const result = await simulateManagerIntervention(teamId, interventionType, intensity, session?.token);
       setSimulation(result);
-      setActiveTab("interventions");
+      changeTab("interventions");
     } catch (err) {
       setSimulationError(err instanceof Error ? err.message : "Simulation failed");
     } finally {
@@ -232,7 +262,66 @@ export default function ManagerPage() {
         subtitle={`AI-powered workforce intelligence for ${summary.team_name}`}
       />
 
-      <ManagerTabNav activeTab={activeTab} onChange={setActiveTab} />
+      <div
+        className={[
+          "grid grid-cols-1 gap-6 items-start",
+          showManagerRail ? "lg:grid-cols-[280px,1fr]" : "",
+        ].join(" ")}
+      >
+        {showManagerRail && (
+          <aside className="lg:sticky lg:top-6 flex flex-col gap-4">
+            <Card padding="lg" className="bg-background-secondary/40">
+              <div className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                Workspace
+              </div>
+              <div className="mt-2">
+                <ManagerTabNav activeTab={activeTab} onChange={changeTab} layout="vertical" />
+              </div>
+            </Card>
+
+            <Card padding="lg" className="hidden lg:block">
+              <div className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                Quick Pulse
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-border bg-background-secondary p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                    Team Score
+                  </div>
+                  <div className="text-xl font-bold text-text-primary">
+                    {summary.team_wellbeing_score.toFixed(0)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background-secondary p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                    High Risk
+                  </div>
+                  <div className="text-xl font-bold text-text-primary">
+                    {summary.high_risk_count}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background-secondary p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                    Stress
+                  </div>
+                  <div className="text-xl font-bold text-text-primary">
+                    {summary.average_stress.toFixed(1)}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-background-secondary p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                    Fatigue
+                  </div>
+                  <div className="text-xl font-bold text-text-primary">
+                    {summary.average_fatigue.toFixed(1)}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </aside>
+        )}
+
+        <div className="flex flex-col gap-6">
 
       {activeTab === "overview" && (
         <div className="flex flex-col gap-6">
@@ -333,7 +422,13 @@ export default function ManagerPage() {
             </div>
           </Card>
 
-          <EmployeeDetailCard employee={selectedEmployee} recommendation={recommendations} />
+          <EmployeeDetailCard
+            employee={selectedEmployee}
+            recommendation={recommendations}
+            dashboard={employeeDashboardState.data}
+            dashboardLoading={employeeDashboardState.loading}
+            dashboardError={employeeDashboardState.error}
+          />
         </div>
       )}
 
@@ -457,6 +552,182 @@ export default function ManagerPage() {
           </section>
         </div>
       )}
+
+      {activeTab === "reports" && (
+        <div className="flex flex-col gap-6">
+          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <KPIBox label="Window" value={reportWindow.toUpperCase()} />
+            <KPIBox label="Team Score" value={`${summary.team_wellbeing_score.toFixed(1)}/100`} />
+            <KPIBox label="High-Risk Employees" value={summary.high_risk_count.toString()} alert={summary.high_risk_count > 0} />
+            <KPIBox label="Trend Points" value={summary.trend.length.toString()} />
+          </section>
+
+          <Card padding="lg" className="flex flex-col gap-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <h3 className="text-card-title text-text-primary">Generate Team Report</h3>
+                <p className="text-caption text-text-secondary">Create leadership-ready summaries from the current analytics state.</p>
+              </div>
+              <select
+                value={reportWindow}
+                onChange={(e) => setReportWindow(e.target.value as "7d" | "14d" | "30d")}
+                className="rounded-input border border-border px-3 py-2 text-sm bg-background-primary"
+              >
+                <option value="7d">Last 7 days</option>
+                <option value="14d">Last 14 days</option>
+                <option value="30d">Last 30 days</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="rounded-lg border border-border bg-background-secondary p-4 flex flex-col gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-text-primary">Executive Snapshot PDF</h4>
+                  <p className="text-xs text-text-secondary mt-1">KPI summary, trend chart, top risk drivers, actions.</p>
+                </div>
+                <Button size="sm">Export PDF</Button>
+              </div>
+              <div className="rounded-lg border border-border bg-background-secondary p-4 flex flex-col gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-text-primary">Operational CSV</h4>
+                  <p className="text-xs text-text-secondary mt-1">Employee-level scores, stress/fatigue, behavior and meetings.</p>
+                </div>
+                <Button size="sm" variant="secondary">Export CSV</Button>
+              </div>
+              <div className="rounded-lg border border-border bg-background-secondary p-4 flex flex-col gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-text-primary">Manager Brief</h4>
+                  <p className="text-xs text-text-secondary mt-1">AI summary and interventions to share in weekly syncs.</p>
+                </div>
+                <Button size="sm" variant="secondary">Generate Brief</Button>
+              </div>
+            </div>
+          </Card>
+
+          <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <Card padding="lg" className="flex flex-col gap-3">
+              <h3 className="text-card-title text-text-primary">Recent Report Runs</h3>
+              {[
+                { name: "Weekly Executive Snapshot", date: "Today", status: "Completed" },
+                { name: "Operational Employee Export", date: "Yesterday", status: "Completed" },
+                { name: "Intervention Impact Summary", date: "2 days ago", status: "Completed" },
+              ].map((item) => (
+                <div key={item.name} className="rounded-md border border-border bg-background-secondary px-3 py-2 flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-text-primary">{item.name}</div>
+                    <div className="text-xs text-text-secondary">{item.date}</div>
+                  </div>
+                  <span className="text-xs font-semibold text-risk-low-text">{item.status}</span>
+                </div>
+              ))}
+            </Card>
+
+            <Card padding="lg" className="flex flex-col gap-3">
+              <h3 className="text-card-title text-text-primary">Scheduled Delivery</h3>
+              <label className="flex items-center justify-between rounded-md border border-border bg-background-secondary px-3 py-2">
+                <span className="text-sm text-text-primary">Auto-email weekly report</span>
+                <input type="checkbox" checked={autoEmailReport} onChange={(e) => setAutoEmailReport(e.target.checked)} />
+              </label>
+              <div className="text-xs text-text-secondary">
+                When enabled, a weekly digest is prepared automatically and sent to manager stakeholders.
+              </div>
+            </Card>
+          </section>
+        </div>
+      )}
+
+      {activeTab === "settings" && (
+        <div className="flex flex-col gap-6">
+          <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <Card padding="lg" className="flex flex-col gap-4">
+              <h3 className="text-card-title text-text-primary">Risk Thresholds</h3>
+              <div className="flex flex-col gap-3">
+                <label className="text-sm text-text-primary">
+                  High-risk score threshold: <span className="font-semibold">{highRiskThreshold}</span>
+                </label>
+                <input
+                  type="range"
+                  min={50}
+                  max={95}
+                  step={1}
+                  value={highRiskThreshold}
+                  onChange={(e) => setHighRiskThreshold(Number(e.target.value))}
+                  className="w-full accent-[#2f8876]"
+                />
+              </div>
+              <div className="flex flex-col gap-3">
+                <label className="text-sm text-text-primary">
+                  Meeting overload alert threshold: <span className="font-semibold">{meetingAlertThreshold}</span>
+                </label>
+                <input
+                  type="range"
+                  min={40}
+                  max={95}
+                  step={1}
+                  value={meetingAlertThreshold}
+                  onChange={(e) => setMeetingAlertThreshold(Number(e.target.value))}
+                  className="w-full accent-[#2f8876]"
+                />
+              </div>
+              <div className="text-xs text-text-secondary">
+                These controls are frontend demo settings for now and can be wired to backend persistence later.
+              </div>
+            </Card>
+
+            <Card padding="lg" className="flex flex-col gap-4">
+              <h3 className="text-card-title text-text-primary">Notifications</h3>
+              <label className="flex items-center justify-between rounded-md border border-border bg-background-secondary px-3 py-2">
+                <span className="text-sm text-text-primary">Enable team digest notifications</span>
+                <input type="checkbox" checked={teamDigestEnabled} onChange={(e) => setTeamDigestEnabled(e.target.checked)} />
+              </label>
+              <label className="flex items-center justify-between rounded-md border border-border bg-background-secondary px-3 py-2">
+                <span className="text-sm text-text-primary">Enable anomaly alerts</span>
+                <input type="checkbox" checked={anomalyAlertsEnabled} onChange={(e) => setAnomalyAlertsEnabled(e.target.checked)} />
+              </label>
+              <div className="text-xs text-text-secondary">
+                Alerting preferences control what appears in the manager queue and report digests.
+              </div>
+            </Card>
+          </section>
+
+          <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <Card padding="lg" className="flex flex-col gap-3">
+              <h3 className="text-card-title text-text-primary">Data Sources</h3>
+              {[
+                { name: "Check-ins API", status: "Connected" },
+                { name: "Meeting Signals", status: "Connected" },
+                { name: "Behavior Signals", status: "Connected" },
+                { name: "AI Recommendation Agent", status: "Connected" },
+              ].map((source) => (
+                <div key={source.name} className="rounded-md border border-border bg-background-secondary px-3 py-2 flex items-center justify-between">
+                  <span className="text-sm text-text-primary">{source.name}</span>
+                  <span className="text-xs font-semibold text-risk-low-text">{source.status}</span>
+                </div>
+              ))}
+            </Card>
+
+            <Card padding="lg" className="flex flex-col gap-3">
+              <h3 className="text-card-title text-text-primary">Workspace Actions</h3>
+              <p className="text-caption text-text-secondary">Manage presentation and operational defaults for this manager workspace.</p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm">Save Settings</Button>
+                <Button size="sm" variant="secondary">Reset Defaults</Button>
+                <Button size="sm" variant="ghost">Preview Alerts</Button>
+              </div>
+            </Card>
+          </section>
+        </div>
+      )}
+        </div>
+      </div>
     </div>
+  );
+}
+
+export default function ManagerPage() {
+  return (
+    <Suspense fallback={<div className="h-24 animate-pulse rounded-card border border-border bg-background-primary" />}>
+      <ManagerPageContent />
+    </Suspense>
   );
 }

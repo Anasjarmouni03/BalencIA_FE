@@ -6,6 +6,8 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { ROUTES } from "@/lib/constants";
 import Button from "@/components/ui/Button";
+import Avatar from "@/components/ui/Avatar";
+import { getProfileImageUrl } from "@/lib/profile-images";
 
 interface TopbarProps {
   /** Page title displayed on the left of the topbar */
@@ -60,12 +62,11 @@ export default function Topbar({ title, actions }: TopbarProps) {
               </p>
             </div>
 
-            {/* Avatar */}
-            <div className="w-8 h-8 rounded-full bg-brand-subtle flex items-center justify-center shrink-0">
-              <span className="text-caption font-semibold text-[#2f8876]">
-                {session.user.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
+            <Avatar
+              name={session.user.name}
+              imageUrl={getProfileImageUrl(session.user)}
+              size="sm"
+            />
 
             {/* Logout */}
             <Button

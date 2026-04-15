@@ -81,6 +81,8 @@ export const EMPLOYEE_NAV = [
 
 export const MANAGER_NAV = [
   { label: "Team overview", href: ROUTES.manager },
+  { label: "Reports", href: `${ROUTES.manager}?tab=reports` },
+  { label: "Settings", href: `${ROUTES.manager}?tab=settings` },
 ] as const;
 
 // ─── Date formatting ───────────────────────────────────────────────────────

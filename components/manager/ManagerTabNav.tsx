@@ -1,10 +1,17 @@
 "use client";
 
-export type ManagerTabKey = "overview" | "employees" | "insights" | "interventions";
+export type ManagerTabKey =
+  | "overview"
+  | "employees"
+  | "insights"
+  | "interventions"
+  | "reports"
+  | "settings";
 
 interface ManagerTabNavProps {
   activeTab: ManagerTabKey;
   onChange: (tab: ManagerTabKey) => void;
+  layout?: "horizontal" | "vertical";
 }
 
 const TABS: Array<{ key: ManagerTabKey; label: string; subtitle: string }> = [
@@ -14,9 +21,14 @@ const TABS: Array<{ key: ManagerTabKey; label: string; subtitle: string }> = [
   { key: "interventions", label: "Interventions", subtitle: "Action and simulation" },
 ];
 
-export default function ManagerTabNav({ activeTab, onChange }: ManagerTabNavProps) {
+export default function ManagerTabNav({
+  activeTab,
+  onChange,
+  layout = "horizontal",
+}: ManagerTabNavProps) {
+  const isVertical = layout === "vertical";
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+    <div className={isVertical ? "flex flex-col gap-2" : "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3"}>
       {TABS.map((tab) => {
         const active = tab.key === activeTab;
         return (
@@ -26,6 +38,7 @@ export default function ManagerTabNav({ activeTab, onChange }: ManagerTabNavProp
             onClick={() => onChange(tab.key)}
             className={[
               "rounded-xl border px-4 py-3 text-left transition-all duration-150",
+              isVertical ? "w-full" : "",
               active
                 ? "border-[#2f8876] bg-brand-subtle shadow-sm"
                 : "border-border bg-background-primary hover:bg-background-secondary",
